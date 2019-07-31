@@ -16,11 +16,7 @@ class RubberBottomSheet extends StatefulWidget {
     @required this.lowerLayer,
     @required this.upperLayer,
     this.menuLayer,
-    this.scrollController, 
-    this.header, 
-    this.headerHeight=50.0, 
-    this.dragFriction=0.52, 
-    this.onDragEnd})
+    this.scrollController, this.header, this.headerHeight=50.0, this.dragFriction=0.52, this.onDragEnd})
       : assert(animationController!=null),
         super(key: key);
 
@@ -65,7 +61,7 @@ class RubberBottomSheetState extends State<RubberBottomSheet> with TickerProvide
 
   bool get halfState => _controller.halfBound != null;
 
-  bool get _shouldScroll => _scrollController != null && _scrollController.hasClients;
+  bool get _shouldScroll => _scrollController != null;
   bool _scrolling = false;
 
   bool get _hasHeader => widget.header != null;
@@ -73,18 +69,6 @@ class RubberBottomSheetState extends State<RubberBottomSheet> with TickerProvide
   /// Adding [substituteScrollController] a value the bottomsheet will change the default one
   ScrollController substituteScrollController;
   ScrollController get _scrollController => substituteScrollController ?? widget.scrollController;
-
-  /// If set true the drag won't move the bottomsheet but the scrolling will be always active
-  bool _forceScrolling = false;
-  forceScroll(bool force) {
-    _forceScrolling = force;
-    _setScrolling(force);
-  }
-
-  bool _enabled = true;
-  set enable(value) {
-    _enabled = value;
-  }
 
   @override
   void initState() {
@@ -186,67 +170,64 @@ class RubberBottomSheetState extends State<RubberBottomSheet> with TickerProvide
   ScrollHoldController _hold;
 
   void _onVerticalDragDown(DragDownDetails details) {
-    if(_enabled){
-      if(_hasHeader){
-        if(_draggingPeak(details.globalPosition)){
-          _setScrolling(false);
-        } else {
-          _setScrolling(true);
-        }
-      } 
-      if(_shouldScroll) {
-        assert(_hold == null);
-        _hold = _scrollController.position.hold(_disposeHold);
+    if(_hasHeader){
+      if(_draggingPeak(details.globalPosition)){
+        _setScrolling(false);
+      } else {
+        _setScrolling(true);
       }
+    }
+    if(_shouldScroll) {
+      assert(_hold == null);
+      _hold = _scrollController.position.hold(_disposeHold);
     }
   }
 
   Offset _lastPosition;
 
   void _onVerticalDragUpdate(DragUpdateDetails details) {
-    if(_enabled){
-      _lastPosition = details.globalPosition;
-      if(_scrolling && _shouldScroll) {
-        // _drag might be null if the drag activity ended and called _disposeDrag.
-        assert(_hold == null || _drag == null);
-        _drag?.update(details);
-        if(_scrollController.position.pixels <= 0 && details.primaryDelta>0 && !_forceScrolling) {
-          _setScrolling(false);
-          _handleDragCancel();
-          if(_scrollController.position.pixels != 0.0) {
-            _scrollController.position.setPixels(0.0);
-          }
+    _lastPosition = details.globalPosition;
+    if(_scrolling && _shouldScroll) {
+      // _drag might be null if the drag activity ended and called _disposeDrag.
+      assert(_hold == null || _drag == null);
+      _drag?.update(details);
+      if(_scrollController.position.pixels <= 0 && details.primaryDelta>0) {
+        _setScrolling(false);
+        _handleDragCancel();
+        if(_scrollController.position.pixels != 0.0) {
+          _scrollController.position.setPixels(0.0);
         }
-      } else {
-        var friction = 1.0;
-        var diff;
-        // Friction if more than upper
-        if (_controller.value > _controller.upperBound) {
-          diff = _controller.value - _controller.upperBound;
-        }
-        // Friction if less than lower
-        else if (_controller.value < _controller.lowerBound) {
-          diff = _controller.lowerBound - _controller.value;
-        }
-        if(_controller.value < _controller.upperBound && _controller.dismissable && _controller.animationState.value == AnimationState.expanded) {
-          diff = _controller.upperBound - _controller.value;
-        }
-        if (diff != null) {
-          friction = widget.dragFriction * pow(1 - diff, 2);
-        }
+      } 
+    } else {
+      var friction = 1.0;
+      var diff;
+      // Friction if more than upper
+      if (_controller.value > _controller.upperBound) {
+        diff = _controller.value - _controller.upperBound;
+      }
+      // Friction if less than lower
+      else if (_controller.value < _controller.lowerBound) {
+        diff = _controller.lowerBound - _controller.value;
+      }
+      if(_controller.value < _controller.upperBound && _controller.dismissable && _controller.animationState.value == AnimationState.expanded) {
+        diff = _controller.upperBound - _controller.value;
+      }
+      if (diff != null) {
+        friction = widget.dragFriction * pow(1 - diff, 2);
+      }
 
-        _controller.value -= details.primaryDelta / screenHeight * friction;
-        if(_shouldScroll && _controller.value >= _controller.upperBound && !_draggingPeak(_lastPosition)) {
-          _controller.value = _controller.upperBound;
-          
-          _setScrolling(true);
-          var startDetails = DragStartDetails(sourceTimeStamp: details.sourceTimeStamp, globalPosition: details.globalPosition);
-          _hold = _scrollController.position.hold(_disposeHold);
-          _drag = _scrollController.position.drag(startDetails, _disposeDrag);
+      _controller.value -= details.primaryDelta / screenHeight * friction;
+      print("dragging peak ${_draggingPeak(_lastPosition)}");
+      if(_shouldScroll && _controller.value >= _controller.upperBound && !_draggingPeak(_lastPosition)) {
+        _controller.value = _controller.upperBound; 
         
-        } else {
-          _handleDragCancel();
-        }
+        _setScrolling(true);
+        var startDetails = DragStartDetails(sourceTimeStamp: details.sourceTimeStamp, globalPosition: details.globalPosition);
+        _hold = _scrollController.position.hold(_disposeHold);
+        _drag = _scrollController.position.drag(startDetails, _disposeDrag);
+      
+      } else {
+        _handleDragCancel();
       }
     }
   }
@@ -258,65 +239,64 @@ class RubberBottomSheetState extends State<RubberBottomSheet> with TickerProvide
   }
 
   void _handleDragStart(DragStartDetails details) {
-    if(_enabled){
-      if(_shouldScroll) {
-        // It's possible for _hold to become null between _handleDragDown and
-        // _handleDragStart, for example if some user code calls jumpTo or otherwise
-        // triggers a new activity to begin.
-        assert(_drag == null);
-        _drag = _scrollController.position.drag(details, _disposeDrag);
-        assert(_drag != null);
-        assert(_hold == null);
-      }
+    if(_shouldScroll) {
+      // It's possible for _hold to become null between _handleDragDown and
+      // _handleDragStart, for example if some user code calls jumpTo or otherwise
+      // triggers a new activity to begin.
+      assert(_drag == null);
+      _drag = _scrollController.position.drag(details, _disposeDrag);
+      assert(_drag != null);
+      assert(_hold == null);
     }
   }
 
   void _onVerticalDragEnd(DragEndDetails details) {
-    if(_enabled) {
-      // If onDragEnd returns a false value the method interrupts
-      if(widget.onDragEnd != null) {
-        var res = widget.onDragEnd();
-        if(res != null && !res) return;
-      }
-        
-      final double flingVelocity = -details.velocity.pixelsPerSecond.dy / screenHeight;
-      if(_scrolling) {
-        assert(_hold == null || _drag == null);
-        _drag?.end(details);
-        assert(_drag == null);
+    // If onDragEnd returns a false value the method interrupts
+    if(widget.onDragEnd != null) {
+      var res = widget.onDragEnd();
+      if(res != null && !res) return;
+    }
+      
+    final double flingVelocity = -details.velocity.pixelsPerSecond.dy / screenHeight;
+    if(_scrolling) {
+      assert(_hold == null || _drag == null);
+      _drag?.end(details);
+      assert(_drag == null);
+    } else {
+      if (details.velocity.pixelsPerSecond.dy.abs() > _kCompleteFlingVelocity) {
+        _controller.fling(_controller.lowerBound, _controller.upperBound,
+            velocity: flingVelocity); 
       } else {
-        if (details.velocity.pixelsPerSecond.dy.abs() > _kCompleteFlingVelocity) {
-          _controller.fling(_controller.lowerBound, _controller.upperBound,
-              velocity: flingVelocity);
-        } else {
-          if (halfState) {
-            if (details.velocity.pixelsPerSecond.dy.abs() > _kMinFlingVelocity) {
-              if (_controller.value > _controller.halfBound) {
-                _controller.fling(_controller.halfBound, _controller.upperBound,
-                    velocity: flingVelocity);
-              } else {
-                _controller.fling(_controller.lowerBound, _controller.halfBound,
-                    velocity: flingVelocity);
-              }
+        if (halfState) {
+          if (details.velocity.pixelsPerSecond.dy.abs() > _kMinFlingVelocity) {
+            if (_controller.value > _controller.halfBound) {
+              _controller.fling(_controller.halfBound, _controller.upperBound,
+                  velocity: flingVelocity); 
             } else {
-              if (_controller.value > (_controller.upperBound + _controller.halfBound) / 2) {
-                _controller.expand();
-              }
-              else if (_controller.value > (_controller.halfBound + _controller.lowerBound) / 2) {
-                _controller.halfExpand();
-              } else {
-                _controller.collapse();
-              }
+              _controller.fling(_controller.lowerBound, _controller.halfBound,
+                  velocity: flingVelocity); 
             }
           } else {
-            if (details.velocity.pixelsPerSecond.dy.abs() > _kMinFlingVelocity) {
-              _controller.fling(_controller.lowerBound, _controller.upperBound, velocity: flingVelocity);
+            if (_controller.value >
+                (_controller.upperBound + _controller.halfBound) / 2) {
+            //  _controller.expand();
+            }
+            else if (_controller.value >
+                (_controller.halfBound + _controller.lowerBound) / 2) {
+           // _controller.halfExpand();
             } else {
-              if (_controller.value > (_controller.upperBound + _controller.lowerBound) / 2) {
-                _controller.expand();
-              } else {
-                _controller.collapse();
-              }
+              _controller.collapse();
+            }
+          }
+        } else {
+          if (details.velocity.pixelsPerSecond.dy.abs() > _kMinFlingVelocity) {
+            _controller.fling(_controller.lowerBound, _controller.upperBound,
+                velocity: flingVelocity); 
+          } else {
+            if (_controller.value > (_controller.upperBound - _controller.lowerBound) / 2) {
+              _controller.expand();
+            } else {
+              _controller.collapse();
             }
           }
         }
@@ -358,7 +338,6 @@ class RubberBottomSheetState extends State<RubberBottomSheet> with TickerProvide
     final top = (sizePeak.height + positionPeak.dy);
     return (globalPosition.dy < top);
   }
-
 }
 
 class RubberBottomSheetScope extends InheritedWidget {
